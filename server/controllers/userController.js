@@ -31,18 +31,37 @@ const getUser = asyncHandler(async (req, res, next) => {
   res.status(200).json({ success: true, data: user });
 });
 
-// @desc    Create user
+// @desc    Municipal Head: Create worker with manual Worker ID
 // @route   POST /api/users
-// @access  Private/Admin
-const createUser = asyncHandler(async (req, res, next) => {
-  // Default to worker role if not provided
-  if (!req.body.role) req.body.role = 'worker';
-  const user = await User.create(req.body);
+// @access  Private/MunicipalHeadOnly
+const createWorker = asyncHandler(async (req, res, next) => {
+  const { name, email, phone, password, workerId } = req.body || {};
 
-  res.status(201).json({
-    success: true,
-    data: user
+  if (!name || !email || !phone || !password || !workerId) {
+    return next(new ErrorResponse('name, email, phone, password, workerId are required', 400));
+  }
+
+  // Normalize inputs
+  const normEmail = String(email).toLowerCase();
+  const normWorkerId = String(workerId).toUpperCase();
+
+  // Ensure unique email and workerId
+  const existingEmail = await User.findOne({ email: normEmail });
+  if (existingEmail) return next(new ErrorResponse('Email already in use', 400));
+  const existingWorker = await User.findOne({ workerId: normWorkerId });
+  if (existingWorker) return next(new ErrorResponse('Worker ID already exists', 400));
+
+  const user = await User.create({
+    name,
+    email: normEmail,
+    phone,
+    password,
+    role: 'worker',
+    workerId: normWorkerId,
+    address: { location: { type: 'Point', coordinates: [0, 0] } }
   });
+
+  res.status(201).json({ success: true, data: { id: user._id, workerId: user.workerId, name: user.name, phone: user.phone } });
 });
 
 // @desc    Update user
@@ -123,7 +142,7 @@ const updateUserPoints = asyncHandler(async (req, res, next) => {
 module.exports = {
   getUsers,
   getUser,
-  createUser,
+  createWorker,
   updateUser,
   deleteUser,
   updateUserPoints
@@ -141,3 +160,13 @@ const getWorkerByWorkerId = asyncHandler(async (req, res, next) => {
 });
 
 module.exports.getWorkerByWorkerId = getWorkerByWorkerId;
+
+// @desc    Municipal Head: List all workers (limited fields)
+// @route   GET /api/users/workers
+// @access  Private/MunicipalHeadOnly
+const listWorkers = asyncHandler(async (req, res, next) => {
+  const workers = await User.find({ role: 'worker' }).select('workerId name phone').sort({ name: 1 });
+  res.status(200).json({ success: true, data: workers });
+});
+
+module.exports.listWorkers = listWorkers;

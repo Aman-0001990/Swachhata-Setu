@@ -59,6 +59,8 @@ const ComplaintSchema = new mongoose.Schema({
     ref: 'User'
   },
   resolutionDetails: {
+    startedAt: Date,
+    completedAt: Date,
     resolvedAt: Date,
     resolvedBy: {
       type: mongoose.Schema.ObjectId,

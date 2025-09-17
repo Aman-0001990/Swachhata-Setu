@@ -179,19 +179,27 @@ const sendTokenResponse = (user, statusCode, res) => {
     });
 };
 
-// @desc    Worker login using workerId and password
+// @desc    Worker login using workerId, email and password
 // @route   POST /api/auth/worker-login
 // @access  Public
 exports.workerLogin = asyncHandler(async (req, res, next) => {
-  const { workerId, password } = req.body;
+  const { workerId, email, password } = req.body;
 
-  if (!workerId || !password) {
-    return next(new ErrorResponse('Please provide workerId and password', 400));
+  if (!workerId || !email || !password) {
+    return next(new ErrorResponse('Please provide workerId, email and password', 400));
   }
 
-  const user = await User.findOne({ workerId, role: 'worker' }).select('+password');
+  // Normalize inputs
+  const normWorkerId = String(workerId).toUpperCase();
+  const normEmail = String(email).toLowerCase();
+
+  const user = await User.findOne({ workerId: normWorkerId, role: 'worker' }).select('+password');
   if (!user) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    return next(new ErrorResponse('Worker ID does not exist', 404));
+  }
+
+  if ((user.email || '').toLowerCase() !== normEmail) {
+    return next(new ErrorResponse('Email does not match the Worker ID', 401));
   }
 
   if (!user.isActive) {
@@ -200,7 +208,7 @@ exports.workerLogin = asyncHandler(async (req, res, next) => {
 
   const isMatch = await user.matchPassword(password);
   if (!isMatch) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    return next(new ErrorResponse('Incorrect password', 401));
   }
 
   const token = user.getSignedJwtToken();

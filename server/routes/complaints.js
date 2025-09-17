@@ -7,7 +7,9 @@ const {
   assignComplaint,
   updateComplaintStatus,
   uploadComplaintImages,
-  uploadResolutionImages
+  uploadResolutionImages,
+  resolveAndReward,
+  rejectComplaint
 } = require('../controllers/complaintController');
 
 const router = express.Router();
@@ -29,6 +31,12 @@ router.put('/:id/assign', authorize('municipal'), assignComplaint);
 
 // Update status (worker or municipal)
 router.put('/:id/status', authorize('worker', 'municipal'), updateComplaintStatus);
+
+// Municipal resolve and reward
+router.put('/:id/resolve', authorize('municipal'), resolveAndReward);
+
+// Municipal reject with notes
+router.put('/:id/reject', authorize('municipal'), rejectComplaint);
 
 // Upload resolution images (worker)
 router.post('/:id/images', authorize('worker'), ...uploadResolutionImages);

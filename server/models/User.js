@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
       'Please add a valid email'
     ]
   },
+  phone: {
+    type: String,
+    required: function () { return this.role === 'worker'; },
+  },
   password: {
     type: String,
     required: [true, 'Please add a password'],
@@ -32,7 +36,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true,
-    index: true
+    index: true,
+    set: v => (typeof v === 'string' ? v.toUpperCase() : v),
+    required: function () { return this.role === 'worker'; }
   },
   address: {
     street: String,
@@ -77,12 +83,10 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-// Auto-generate workerId for workers if missing
-userSchema.pre('save', async function(next) {
-  if (this.role === 'worker' && !this.workerId) {
-    // Simple unique ID: WRK-<6 random chars>
-    const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-    this.workerId = `WRK-${rand}`;
+// Ensure workerId is uppercase if present
+userSchema.pre('save', function (next) {
+  if (this.workerId && typeof this.workerId === 'string') {
+    this.workerId = this.workerId.toUpperCase();
   }
   next();
 });

@@ -1,8 +1,12 @@
 import axios from 'axios'
 
-const api = axios.create({
-  baseURL: '/',
-})
+// Use VITE_API_BASE if provided (e.g., https://api.example.com). Otherwise, same-origin ('').
+// All callers use paths like '/api/...', which will resolve to:
+//   - `${VITE_API_BASE}/api/...` when set, or
+//   - '/api/...' under the same origin when not set.
+const baseURL = import.meta.env?.VITE_API_BASE || ''
+
+const api = axios.create({ baseURL })
 
 // Attach token
 api.interceptors.request.use((config) => {

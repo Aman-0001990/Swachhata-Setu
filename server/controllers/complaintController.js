@@ -24,6 +24,44 @@ const storage = multer.diskStorage({
   }
 });
 
+// @desc    Municipal: Mark complaint resolved and optionally reward worker
+// @route   PUT /api/complaints/:id/resolve
+// @access  Private (municipal)
+exports.resolveAndReward = asyncHandler(async (req, res, next) => {
+  const { points = 0, notes } = req.body;
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Invalid complaint id', 400));
+  }
+  const complaint = await Complaint.findById(req.params.id).populate('assignedTo');
+  if (!complaint) return next(new ErrorResponse('Complaint not found', 404));
+
+  // Only municipal users
+  if (req.user.role !== 'municipal') {
+    return next(new ErrorResponse('Not authorized', 403));
+  }
+
+  complaint.status = 'resolved';
+  complaint.resolutionDetails = complaint.resolutionDetails || {};
+  complaint.resolutionDetails.resolvedAt = new Date();
+  complaint.resolutionDetails.resolvedBy = req.user.id;
+  if (notes) complaint.resolutionDetails.notes = notes;
+
+  // Reward worker if assigned and points provided
+  if (!complaint.pointsAwarded && complaint.assignedTo && Number(points) > 0) {
+    const worker = await User.findById(complaint.assignedTo._id);
+    if (worker) {
+      worker.points += parseInt(points);
+      worker.pointsHistory = worker.pointsHistory || [];
+      worker.pointsHistory.push({ points: parseInt(points), reason: `Reward for resolving complaint ${complaint._id}`, date: new Date() });
+      await worker.save();
+      complaint.pointsAwarded = true;
+    }
+  }
+
+  await complaint.save();
+  res.status(200).json({ success: true, data: complaint });
+});
+
 const upload = multer({ storage });
 
 // Expose multer middleware
@@ -65,7 +103,9 @@ exports.getComplaints = asyncHandler(async (req, res, next) => {
     filter.$or = [{ assignedTo: req.user.id }];
   }
 
-  const complaints = await Complaint.find(filter).populate('user', 'name role').populate('assignedTo', 'name role');
+  const complaints = await Complaint.find(filter)
+    .populate('user', 'name role')
+    .populate('assignedTo', 'name role workerId');
   res.status(200).json({ success: true, count: complaints.length, data: complaints });
 });
 
@@ -91,22 +131,34 @@ exports.getComplaint = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/complaints/:id/assign
 // @access  Private (municipal)
 exports.assignComplaint = asyncHandler(async (req, res, next) => {
-  const { workerId } = req.body;
+  let { workerId } = req.body;
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return next(new ErrorResponse('Invalid complaint id', 400));
   }
-  if (!mongoose.Types.ObjectId.isValid(workerId)) {
-    return next(new ErrorResponse('Invalid worker id', 400));
-  }
+
   const complaint = await Complaint.findById(req.params.id);
   if (!complaint) return next(new ErrorResponse('Complaint not found', 404));
 
-  const worker = await User.findById(workerId);
+  // Support both public workerId (e.g., "WRK-XXXXXX") and MongoDB ObjectId
+  let worker = null;
+  if (typeof workerId === 'string' && !mongoose.Types.ObjectId.isValid(workerId)) {
+    // Treat as manual Worker ID
+    const manualId = workerId.trim().toUpperCase();
+    worker = await User.findOne({ workerId: manualId, role: 'worker' });
+    if (!worker) return next(new ErrorResponse('Worker ID does not exist', 404));
+  } else {
+    // Treat as ObjectId
+    if (!mongoose.Types.ObjectId.isValid(workerId)) {
+      return next(new ErrorResponse('Invalid worker id', 400));
+    }
+    worker = await User.findById(workerId);
+  }
+
   if (!worker || worker.role !== 'worker') {
     return next(new ErrorResponse('Invalid worker', 400));
   }
 
-  complaint.assignedTo = workerId;
+  complaint.assignedTo = worker._id;
   complaint.status = 'in-progress';
   await complaint.save();
 
@@ -117,30 +169,57 @@ exports.assignComplaint = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/complaints/:id/status
 // @access  Private (worker, municipal)
 exports.updateComplaintStatus = asyncHandler(async (req, res, next) => {
-  const { status, notes } = req.body;
-  const allowed = ['pending', 'in-progress', 'resolved', 'rejected'];
-  if (!allowed.includes(status)) return next(new ErrorResponse('Invalid status', 400));
-
+  const { status } = req.body;
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return next(new ErrorResponse('Invalid complaint id', 400));
   }
   const complaint = await Complaint.findById(req.params.id);
   if (!complaint) return next(new ErrorResponse('Complaint not found', 404));
 
-  // Worker can update only assigned complaints
-  if (req.user.role === 'worker' && complaint.assignedTo?.toString() !== req.user.id) {
+  // Only worker assigned or municipal can update
+  if (req.user.role === 'worker' && (!complaint.assignedTo || complaint.assignedTo.toString() !== req.user.id)) {
     return next(new ErrorResponse('Not authorized', 403));
   }
 
   complaint.status = status;
-  if (status === 'resolved') {
-    complaint.resolutionDetails = complaint.resolutionDetails || {};
-    complaint.resolutionDetails.resolvedAt = new Date();
-    complaint.resolutionDetails.resolvedBy = req.user.id;
-    if (notes) complaint.resolutionDetails.notes = notes;
+
+  // Track times for worker progress
+  complaint.resolutionDetails = complaint.resolutionDetails || {};
+  if (req.user.role === 'worker') {
+    if (status === 'in-progress' && !complaint.resolutionDetails.startedAt) {
+      complaint.resolutionDetails.startedAt = new Date();
+    }
+    if (status === 'resolved') {
+      complaint.resolutionDetails.completedAt = new Date();
+    }
   }
 
   await complaint.save();
+
+  res.status(200).json({ success: true, data: complaint });
+});
+
+// @desc    Municipal: Reject complaint with notes
+// @route   PUT /api/complaints/:id/reject
+// @access  Private (municipal)
+exports.rejectComplaint = asyncHandler(async (req, res, next) => {
+  const { notes } = req.body;
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return next(new ErrorResponse('Invalid complaint id', 400));
+  }
+  const complaint = await Complaint.findById(req.params.id);
+  if (!complaint) return next(new ErrorResponse('Complaint not found', 404));
+  if (req.user.role !== 'municipal') {
+    return next(new ErrorResponse('Not authorized', 403));
+  }
+
+  complaint.status = 'rejected';
+  complaint.resolutionDetails = complaint.resolutionDetails || {};
+  if (notes) complaint.resolutionDetails.notes = notes;
+  complaint.resolutionDetails.resolvedBy = req.user.id;
+  complaint.resolutionDetails.resolvedAt = new Date();
+  await complaint.save();
+
   res.status(200).json({ success: true, data: complaint });
 });
 

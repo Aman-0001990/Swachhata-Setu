@@ -1,15 +1,21 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
-import Signup from './pages/Signup'
 import CitizenDashboard from './pages/dashboards/CitizenDashboard'
 import WorkerDashboard from './pages/dashboards/WorkerDashboard'
 import MunicipalDashboard from './pages/dashboards/MunicipalDashboard'
+import MunicipalLayout from './pages/municipal/MunicipalLayout'
+import ComplaintsPage from './pages/municipal/ComplaintsPage'
+import TasksPage from './pages/municipal/TasksPage'
+import CreateWorkerPage from './pages/municipal/CreateWorkerPage'
+import WorkerListPage from './pages/municipal/WorkerListPage'
+import TrackerPage from './pages/municipal/TrackerPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 import RoleSelect from './pages/RoleSelect'
 import MunicipalLogin from './pages/MunicipalLogin'
 import WorkerLogin from './pages/WorkerLogin'
+import Signup from './pages/Signup'
 
 export default function App() {
   const { user } = useAuth()
@@ -34,9 +40,9 @@ export default function App() {
       } />
 
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/municipal-login" element={<MunicipalLogin />} />
       <Route path="/worker-login" element={<WorkerLogin />} />
-      <Route path="/signup" element={<Signup />} />
 
       <Route path="/citizen" element={
         <ProtectedRoute roles={["citizen"]}>
@@ -52,9 +58,16 @@ export default function App() {
 
       <Route path="/municipal" element={
         <ProtectedRoute roles={["municipal"]}>
-          <MunicipalDashboard />
+          <MunicipalLayout />
         </ProtectedRoute>
-      } />
+      }>
+        <Route index element={<Navigate to="/municipal/complaints" replace />} />
+        <Route path="complaints" element={<ComplaintsPage />} />
+        <Route path="tasks" element={<TasksPage />} />
+        <Route path="workers" element={<WorkerListPage />} />
+        <Route path="workers/new" element={<CreateWorkerPage />} />
+        <Route path="tracker" element={<TrackerPage />} />
+      </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

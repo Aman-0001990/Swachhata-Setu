@@ -50,8 +50,8 @@ export function AuthProvider({ children }) {
     throw new Error('Login failed')
   }
 
-  const workerLogin = async (workerId, password) => {
-    const { data } = await api.post('/api/auth/worker-login', { workerId, password })
+  const workerLogin = async (workerId, email, password) => {
+    const { data } = await api.post('/api/auth/worker-login', { workerId, email, password })
     if (data?.token) {
       localStorage.setItem('token', data.token)
       setToken(data.token)

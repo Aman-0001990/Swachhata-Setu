@@ -1,1 +1,144 @@
 @import "tailwindcss";
+
+/* Custom global styles */
+body {
+  @apply bg-slate-900 text-slate-100;
+}
+
+/* Lightweight theme aliases (to avoid reliance on a UI lib theme) */
+:root {
+  --bg: #0b1220;
+  --fg: #e6edf3;
+  --muted: #1c2536;
+  --muted-fg: #94a3b8;
+  --border: rgba(255, 255, 255, 0.12);
+  --primary: #10b981;
+  /* emerald-500 */
+  --success: #22c55e;
+  /* green-500 */
+  --destructive: #ef4444;
+  /* red-500 */
+  --accent: #06b6d4;
+  /* cyan-500 */
+}
+
+/* Background/text helpers */
+.bg-background {
+  background-color: var(--bg);
+}
+
+.text-foreground {
+  color: var(--fg);
+}
+
+.bg-muted {
+  background-color: var(--muted);
+}
+
+.text-muted-foreground {
+  color: var(--muted-fg);
+}
+
+.bg-input {
+  background-color: rgba(148, 163, 184, 0.08);
+}
+
+.border-border {
+  border-color: var(--border);
+}
+
+/* Semantic colors */
+.bg-primary\/10 {
+  background-color: rgba(16, 185, 129, 0.10);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.border-primary\/20 {
+  border-color: rgba(16, 185, 129, 0.20);
+}
+
+.bg-success\/10 {
+  background-color: rgba(34, 197, 94, 0.10);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.border-success\/20 {
+  border-color: rgba(34, 197, 94, 0.20);
+}
+
+.text-success-foreground {
+  color: #052e16;
+}
+
+.bg-destructive\/10 {
+  background-color: rgba(239, 68, 68, 0.10);
+}
+
+.text-destructive {
+  color: var(--destructive);
+}
+
+.border-destructive\/20 {
+  border-color: rgba(239, 68, 68, 0.20);
+}
+
+.bg-accent\/20 {
+  background-color: rgba(6, 182, 212, 0.20);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.border-accent\/30 {
+  border-color: rgba(6, 182, 212, 0.30);
+}
+
+.bg-muted\/20 {
+  background-color: rgba(28, 37, 54, 0.20);
+}
+
+.bg-muted\/30 {
+  background-color: rgba(28, 37, 54, 0.30);
+}
+
+.border-border\/50 {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Gradients and shadows used in headers/cards */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.from-emerald-400 {
+  --tw-gradient-from: #34d399;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(52, 211, 153, 0));
+}
+
+.to-teal-300 {
+  --tw-gradient-to: #5eead4;
+}
+
+.bg-gradient-card {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.04));
+}
+
+.shadow-card {
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.06);
+}
+
+.shadow-elevated {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+}
+
+/* Compact badge helpers when not using a component lib */
+.badge {
+  @apply inline-block rounded-full border px-2 py-0.5 text-xs;
+}
