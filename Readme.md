@@ -1,10 +1,13 @@
-Got it ✅. I’ll turn your idea into a structured, professional README draft that clearly explains the three interfaces (Citizen, Worker, Municipal Head), their features, and the overall ecosystem. Here’s the draft:
-
----
-
 # ♻ Waste Management System
 
 A smart, Indian-first waste management platform designed to connect citizens, workers, and municipal heads into one ecosystem. The app ensures cleanliness, transparency, rewards, and profit generation from waste recycling.
+
+---
+
+## 🚀 Live Demo
+
+Check out the live version of the app here:  
+[Waste Management System Live](https://chipper-chimera-d0571f.netlify.app/) — deployed with Netlify.
 
 ---
 
@@ -28,7 +31,6 @@ The system also includes monetary incentives, points-based rewards, penalties, a
 * 💰 Hire Workers for Extra Garbage: On occasions (weddings, parties), citizens can pay workers directly → workers get bonuses → city stays clean.
 * ✅ Verified Accounts: All citizens are verified by workers for authenticity.
 * 🎁 Bonus & Penalty System:
-
   * Bonus for genuine reports.
   * Penalty points deducted for false reports or violations.
 * 🚮 Complain about Dustbins: If a dustbin isn’t emptied, citizens can report → complaint goes directly to the municipal head → assigned worker gets notified.
@@ -38,17 +40,14 @@ The system also includes monetary incentives, points-based rewards, penalties, a
 ### 2️⃣ Worker App
 
 * 🚛 Dustbin Management with QR/Tag Scanner:
-
   * Scan each bin tag to confirm collection.
   * Head can verify bin status.
 * 🔄 Task Reassignment: If a worker’s bins are full, he can assign to nearby available workers.
 * 🎓 Citizen Training: Teach citizens about segregation, composting, etc. → earn extra points.
 * 🎖 Reward Points System:
-
   * Extra work = extra points.
   * Points can be redeemed for govt. benefits, tickets, or special occasions.
 * ⚠ Blacklisting Power:
-
   * If a household repeatedly ignores segregation rules → after 2 warnings → penalty/blacklist.
   * Municipal head reviews and approves blacklist.
 
@@ -58,21 +57,17 @@ The system also includes monetary incentives, points-based rewards, penalties, a
 
 * 📡 Complete Monitoring: Track workers’ locations, task status, and complaints.
 * 🎥 Training Chain:
-
   * Heads train workers with tutorials.
   * Workers train citizens.
   * Verification with uploaded training videos.
 * ♻ Waste-to-Wealth:
-
   * Wet waste → fertilizer → sold to farmers.
   * Segregated waste (metal, electronics, plastics) → sold to industries.
   * Profits reinvested in new bins, vehicles, and worker bonuses.
 * 🏅 Recognition & Incentives:
-
   * Heads get honor/rewards if their area is maintained clean.
 * 🛠 Complaint Resolution: Directly handle citizen complaints and assign to workers.
 * 💰 Profit Sharing Ecosystem:
-
   * Worker overtime = bonus points & extra money.
   * Head = cashback for recycling efficiency.
   * Citizens = penalty coverage through earned points.
@@ -108,5 +103,3 @@ The system sustains itself through:
 * Nationwide integration with Swachh Bharat Mission.
 
 ---
-
-Would you like me to also create a visual flowchart (citizen → worker → head → recycling) for your README so it looks professional and easy to understand?
