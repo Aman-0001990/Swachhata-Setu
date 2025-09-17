@@ -29,12 +29,12 @@ export default function RoleSelect() {
           </button>
 
           <button
-            onClick={() => navigate('/signup?role=citizen')}
+            onClick={() => navigate('/login')}
             className="rounded-2xl border border-white/10 bg-slate-900/60 hover:bg-slate-900/70 p-6 text-left transition"
           >
             <div className="text-slate-300 text-sm">Citizen</div>
-            <div className="mt-1 text-xl font-semibold">Create citizen account</div>
-            <div className="mt-2 text-slate-400 text-sm">Name, email and password only</div>
+            <div className="mt-1 text-xl font-semibold">Citizen Login</div>
+            <div className="mt-2 text-slate-400 text-sm">Use your registered email and password</div>
           </button>
         </div>
 

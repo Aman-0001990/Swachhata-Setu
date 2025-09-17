@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import CitizenDashboard from './pages/dashboards/CitizenDashboard'
@@ -15,10 +15,18 @@ import { useAuth } from './context/AuthContext'
 import RoleSelect from './pages/RoleSelect'
 import MunicipalLogin from './pages/MunicipalLogin'
 import WorkerLogin from './pages/WorkerLogin'
-import Signup from './pages/Signup'
+// Signup disabled in this build; we redirect /signup to /login
+import Loader from './components/Loader'
 
 export default function App() {
   const { user } = useAuth()
+  const [booting, setBooting] = useState(true)
+
+  useEffect(() => {
+    // Ensure the app always shows a brief branded loader before landing
+    const t = setTimeout(() => setBooting(false), 1000) // 1s splash
+    return () => clearTimeout(t)
+  }, [])
 
   const getRoleRoute = (role) => {
     switch (role) {
@@ -33,6 +41,8 @@ export default function App() {
     }
   }
 
+  if (booting) return <Loader label="Preparing Swachhata Setu" />
+
   return (
     <Routes>
       <Route path="/" element={
@@ -40,7 +50,7 @@ export default function App() {
       } />
 
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<Navigate to="/login" replace />} />
       <Route path="/municipal-login" element={<MunicipalLogin />} />
       <Route path="/worker-login" element={<WorkerLogin />} />
 
