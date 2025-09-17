@@ -8,7 +8,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        // Configure with env var for flexibility during development.
+        // Example: VITE_PROXY_TARGET=https://swachhata-setu.onrender.com
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },

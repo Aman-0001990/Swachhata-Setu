@@ -10,9 +10,10 @@ export default function TrackerPage() {
   const [filters, setFilters] = useState({ workerId: '', status: 'all', category: 'all', q: '' })
   const [reward, setReward] = useState({}) // { [complaintId]: { points, notes } }
 
+  const API_BASE = import.meta.env?.VITE_API_BASE || ''
   const toUrl = (u) => {
     if (!u) return ''
-    return u.startsWith('http') ? u : `${u}`
+    return u.startsWith('http') ? u : `${API_BASE}${u}`
   }
 
   const resolveComplaint = async (id) => {

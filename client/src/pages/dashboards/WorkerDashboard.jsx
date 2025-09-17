@@ -25,7 +25,8 @@ export default function WorkerDashboard() {
   // ------------------------
   // Helpers
   // ------------------------
-  const toUrl = (u) => (!u ? '' : u.startsWith('http') ? u : `${u}`)
+  const API_BASE = import.meta.env?.VITE_API_BASE || ''
+  const toUrl = (u) => (!u ? '' : u.startsWith('http') ? u : `${API_BASE}${u}`)
 
   const getStatusBadge = (status) => {
     const map = {
