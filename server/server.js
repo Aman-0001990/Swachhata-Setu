@@ -19,12 +19,26 @@ app.use(cookieParser());
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/waste-management', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+mongoose.set('strictQuery', false);
+const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/waste-management';
+
+async function connectWithRetry(attempt = 1) {
+  try {
+    await mongoose.connect(mongoUri, {
+      // Mongoose 7+ sensible defaults; keep explicit for clarity
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Connected to MongoDB');
+  } catch (err) {
+    console.error(`MongoDB connection error (attempt ${attempt}):`, err?.message || err);
+    // For Atlas IP whitelist cases, keep retrying in the background
+    const delayMs = Math.min(30000, 2000 * attempt); // backoff up to 30s
+    setTimeout(() => connectWithRetry(attempt + 1), delayMs);
+  }
+}
+
+connectWithRetry();
 
 // Routes
 app.use('/api/auth', authRoutes);
