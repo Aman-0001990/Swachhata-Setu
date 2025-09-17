@@ -17,6 +17,8 @@ import MunicipalLogin from './pages/MunicipalLogin'
 import WorkerLogin from './pages/WorkerLogin'
 // Signup disabled in this build; we redirect /signup to /login
 import Loader from './components/Loader'
+import Landing from './pages/Landing'
+import Signup from './pages/Signup'
 
 export default function App() {
   const { user } = useAuth()
@@ -46,11 +48,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={
-        user ? <Navigate to={getRoleRoute(user.role)} replace /> : <RoleSelect />
+        user ? <Navigate to={getRoleRoute(user.role)} replace /> : <Landing />
       } />
 
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Navigate to="/login" replace />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/municipal-login" element={<MunicipalLogin />} />
       <Route path="/worker-login" element={<WorkerLogin />} />
 

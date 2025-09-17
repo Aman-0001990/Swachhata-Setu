@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, logout } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,8 +16,13 @@ export default function Login() {
     setLoading(true)
     try {
       const { role } = await login(email, password)
-      const redirect = role === 'citizen' ? '/citizen' : role === 'worker' ? '/worker' : '/municipal'
-      navigate(redirect, { replace: true })
+      if (role !== 'citizen') {
+        // Prevent logging into other roles from the citizen login page
+        logout()
+        setError('This page is for Citizens only. Please use Worker or Municipal login for those roles.')
+        return
+      }
+      navigate('/citizen', { replace: true })
     } catch (err) {
       setError(err?.response?.data?.error || err.message)
     } finally {
@@ -32,8 +37,14 @@ export default function Login() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30 mx-auto">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M12 2.25c5.385 0 9.75 3.876 9.75 8.625 0 2.268-1.09 4.318-2.853 5.773-.236.195-.384.483-.384.789v1.714a1.875 1.875 0 01-2.716 1.667l-2.563-1.293a1.125 1.125 0 00-.5-.12h-.5c-5.385 0-9.75-3.876-9.75-8.625S6.615 2.25 12 2.25z"/></svg>
           </div>
-          <h1 className="mt-3 text-2xl font-bold">Welcome back</h1>
-          <p className="mt-1 text-sm text-slate-400">Sign in to your Waste Management account</p>
+          <h1 className="mt-3 text-2xl font-bold">Citizen Login</h1>
+          <p className="mt-1 text-sm text-slate-400">Use your registered email and password</p>
+          <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+            <span className="text-slate-500">Or switch:</span>
+            <button type="button" onClick={() => window.location.assign('/worker-login')} className="text-emerald-400 hover:text-emerald-300">Worker Login</button>
+            <span className="text-slate-600">•</span>
+            <button type="button" onClick={() => window.location.assign('/municipal-login')} className="text-emerald-400 hover:text-emerald-300">Municipal Login</button>
+          </div>
         </div>
 
         {error && (
@@ -64,7 +75,7 @@ export default function Login() {
 
         <div className="flex items-center justify-between text-xs text-slate-400 mt-2 mb-3">
           <span>Use your registered email</span>
-          {/* <span className="text-slate-500">Signup disabled</span> */}
+          <Link to="/signup" className="text-emerald-400 hover:text-emerald-300">Create account</Link>
         </div>
 
         <button
