@@ -4,7 +4,9 @@ import axios from 'axios'
 // All callers use paths like '/api/...', which will resolve to:
 //   - `${VITE_API_BASE}/api/...` when set, or
 //   - '/api/...' under the same origin when not set.
-const baseURL = import.meta.env?.VITE_API_BASE || ''
+const rawBase = import.meta.env?.VITE_API_BASE || ''
+// Normalize to avoid accidental double slashes (e.g., 'https://host//api/...')
+const baseURL = rawBase.endsWith('/') ? rawBase.slice(0, -1) : rawBase
 
 const api = axios.create({ baseURL })
 
