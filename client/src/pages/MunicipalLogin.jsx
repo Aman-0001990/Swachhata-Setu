@@ -50,7 +50,7 @@ export default function MunicipalLogin() {
           required
           className="w-full rounded-xl border border-white/10 bg-slate-900/70 text-slate-100 placeholder-slate-500 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
-
+    
         <label className="block text-sm font-medium text-slate-300 mb-1 mt-2">Password</label>
         <input
           type="password"
