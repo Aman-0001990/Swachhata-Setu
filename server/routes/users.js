@@ -21,6 +21,8 @@ router.get('/worker/:workerId', getWorkerByWorkerId);
 // All routes are protected and only accessible by admin/municipal
 router.use(protect);
 router.use(authorize('municipal', 'admin'));
+// List all workers (Worker ID, Name, Phone) — allow any municipal/admin, not only head
+router.get('/workers', listWorkers);
 // Additionally restrict critical routes to the designated municipal head
 router.use(municipalHeadOnly);
 
@@ -29,8 +31,6 @@ router
   .get(advancedResults(User), getUsers)
   .post(createWorker);
 
-// List all workers (Worker ID, Name, Phone)
-router.get('/workers', listWorkers);
 
 router
   .route('/:id')

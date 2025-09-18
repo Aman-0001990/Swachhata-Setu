@@ -39,6 +39,15 @@ const ComplaintSchema = new mongoose.Schema({
     type: String,
     required: false
   }],
+  // Head review outcomes
+  rewardPoints: {
+    type: Number,
+    default: 0
+  },
+  penaltyPoints: {
+    type: Number,
+    default: 0
+  },
   status: {
     type: String,
     enum: ['pending', 'in-progress', 'resolved', 'rejected'],

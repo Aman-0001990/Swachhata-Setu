@@ -154,7 +154,8 @@ module.exports = {
 const getWorkerByWorkerId = asyncHandler(async (req, res, next) => {
   const { workerId } = req.params;
   if (!workerId) return next(new ErrorResponse('workerId is required', 400));
-  const user = await User.findOne({ workerId, role: 'worker' }).select('name email workerId role');
+  const norm = String(workerId).trim().toUpperCase();
+  const user = await User.findOne({ workerId: norm, role: 'worker' }).select('name email workerId role');
   if (!user) return next(new ErrorResponse('Worker not found', 404));
   res.status(200).json({ success: true, data: user });
 });

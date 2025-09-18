@@ -5,6 +5,7 @@ import CitizenDashboard from './pages/dashboards/CitizenDashboard'
 import WorkerDashboard from './pages/dashboards/WorkerDashboard'
 import MunicipalDashboard from './pages/dashboards/MunicipalDashboard'
 import MunicipalLayout from './pages/municipal/MunicipalLayout'
+import HistoryPage from './pages/municipal/HistoryPage'
 import ComplaintsPage from './pages/municipal/ComplaintsPage'
 import TasksPage from './pages/municipal/TasksPage'
 import CreateWorkerPage from './pages/municipal/CreateWorkerPage'
@@ -55,6 +56,8 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/municipal-login" element={<MunicipalLogin />} />
       <Route path="/worker-login" element={<WorkerLogin />} />
+      {/* Graceful alias: redirect /citizens -> /citizen */}
+      <Route path="/citizens" element={<Navigate to="/citizen" replace />} />
 
       <Route path="/citizen" element={
         <ProtectedRoute roles={["citizen"]}>
@@ -79,6 +82,7 @@ export default function App() {
         <Route path="workers" element={<WorkerListPage />} />
         <Route path="workers/new" element={<CreateWorkerPage />} />
         <Route path="tracker" element={<TrackerPage />} />
+        <Route path="history" element={<HistoryPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,7 +9,8 @@ const {
   uploadComplaintImages,
   uploadResolutionImages,
   resolveAndReward,
-  rejectComplaint
+  rejectComplaint,
+  getComplaintUpdates
 } = require('../controllers/complaintController');
 
 const router = express.Router();
@@ -37,6 +38,9 @@ router.put('/:id/resolve', authorize('municipal'), resolveAndReward);
 
 // Municipal reject with notes
 router.put('/:id/reject', authorize('municipal'), rejectComplaint);
+
+// Complaint updates (history)
+router.get('/:id/updates', getComplaintUpdates);
 
 // Upload resolution images (worker)
 router.post('/:id/images', authorize('worker'), ...uploadResolutionImages);

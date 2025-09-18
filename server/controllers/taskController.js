@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
+const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 
@@ -7,15 +8,39 @@ const asyncHandler = require('../middleware/async');
 // @route   POST /api/tasks
 // @access  Private (municipal)
 exports.createTask = asyncHandler(async (req, res, next) => {
+  const { title, description, priority, dueDate, location } = req.body || {};
+  let { assignedTo } = req.body || {};
+
+  if (!title || typeof title !== 'string') {
+    return next(new ErrorResponse('title is required', 400));
+  }
+
+  // Resolve assignedTo: accept either Mongo ObjectId or public workerId string
+  let assignedToId = undefined;
+  if (assignedTo) {
+    if (typeof assignedTo === 'string' && !mongoose.Types.ObjectId.isValid(assignedTo)) {
+      const manualId = assignedTo.trim().toUpperCase();
+      const worker = await User.findOne({ workerId: manualId, role: 'worker' });
+      if (!worker) return next(new ErrorResponse('Worker ID does not exist', 404));
+      assignedToId = worker._id;
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
+        return next(new ErrorResponse('Invalid assignedTo', 400));
+      }
+      assignedToId = assignedTo;
+    }
+  }
+
   const payload = {
-    title: req.body.title,
-    description: req.body.description,
+    title,
+    description,
     createdBy: req.user.id,
-    assignedTo: req.body.assignedTo,
-    status: req.body.assignedTo ? 'assigned' : 'pending',
-    priority: req.body.priority || 'medium',
-    dueDate: req.body.dueDate,
-    location: req.body.location
+    assignedTo: assignedToId,
+    status: assignedToId ? 'assigned' : 'pending',
+    priority: priority || 'medium',
+    dueDate,
+    location,
+    relatedComplaint: req.body.relatedComplaint
   };
 
   const task = await Task.create(payload);
@@ -32,7 +57,9 @@ exports.getTasks = asyncHandler(async (req, res, next) => {
   } else if (req.user.role === 'citizen') {
     filter.createdBy = req.user.id; // if we allow citizens to create hire tasks later
   }
-  const tasks = await Task.find(filter).populate('createdBy', 'name role').populate('assignedTo', 'name role');
+  const tasks = await Task.find(filter)
+    .populate('createdBy', 'name role')
+    .populate('assignedTo', 'name role workerId');
   res.status(200).json({ success: true, count: tasks.length, data: tasks });
 });
 
@@ -56,12 +83,23 @@ exports.assignTask = asyncHandler(async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return next(new ErrorResponse('Invalid task id', 400));
   }
-  if (!mongoose.Types.ObjectId.isValid(workerId)) {
-    return next(new ErrorResponse('Invalid worker id', 400));
+  // Accept either Mongo ObjectId OR public workerId like 'WRK-0001'
+  let workerObjectId = null;
+  if (typeof workerId === 'string' && !mongoose.Types.ObjectId.isValid(workerId)) {
+    const manualId = workerId.trim().toUpperCase();
+    const worker = await User.findOne({ workerId: manualId, role: 'worker' });
+    if (!worker) return next(new ErrorResponse('Worker ID does not exist', 404));
+    workerObjectId = worker._id;
+  } else {
+    if (!mongoose.Types.ObjectId.isValid(workerId)) {
+      return next(new ErrorResponse('Invalid worker id', 400));
+    }
+    workerObjectId = workerId;
   }
+
   const task = await Task.findById(req.params.id);
   if (!task) return next(new ErrorResponse('Task not found', 404));
-  task.assignedTo = workerId;
+  task.assignedTo = workerObjectId;
   task.status = 'assigned';
   await task.save();
   res.status(200).json({ success: true, data: task });
@@ -86,6 +124,12 @@ exports.updateTaskStatus = asyncHandler(async (req, res, next) => {
   }
 
   task.status = status;
+  if (status === 'completed') {
+    task.completedAt = new Date();
+  } else if (task.completedAt) {
+    // if moving away from completed, clear stamp
+    task.completedAt = undefined;
+  }
   await task.save();
   res.status(200).json({ success: true, data: task });
 });

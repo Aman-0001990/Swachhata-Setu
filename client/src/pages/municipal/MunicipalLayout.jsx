@@ -19,7 +19,7 @@ export default function MunicipalLayout() {
         </div>
       </header>
 
-      <nav className="max-w-7xl mx-auto px-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
+      <nav className="max-w-7xl mx-auto px-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
         <NavLink to="/municipal/complaints" end className={active}>
           <span className="inline-flex items-center gap-2">
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z"/></svg>
@@ -48,6 +48,12 @@ export default function MunicipalLayout() {
           <span className="inline-flex items-center gap-2">
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v2H3zm0 6h12v2H3zm0 6h18v2H3z"/></svg>
             Tracker
+          </span>
+        </NavLink>
+        <NavLink to="/municipal/history" end className={active}>
+          <span className="inline-flex items-center gap-2">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3zm1 8V7h-2v6h6v-2h-4z"/></svg>
+            History
           </span>
         </NavLink>
       </nav>

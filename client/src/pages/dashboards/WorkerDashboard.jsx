@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Avatar from '../../components/Avatar'
 import api from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
@@ -11,6 +12,7 @@ export default function WorkerDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   // Local, unsent files chosen by the worker per complaint
   const [localBefore, setLocalBefore] = useState({}) // { [complaintId]: File[] }
@@ -138,7 +140,10 @@ export default function WorkerDashboard() {
     const id = complaint._id
     const hasServerAfter = (complaint.resolutionDetails?.afterImages || []).length > 0
     const hasLocalAfter = (localAfter[id] || []).length > 0
+    const hasLocalBefore = (localBefore[id] || []).length > 0
 
+    // Safety: if worker selected some Before images but forgot to press Upload, do it now
+    if (hasLocalBefore) await handleUpload(id, 'before')
     if (hasLocalAfter) await handleUpload(id, 'after')
     const nowHasAfter = hasServerAfter || hasLocalAfter
 
@@ -273,8 +278,37 @@ export default function WorkerDashboard() {
   ]
   const currentBadge = badgeThresholds.reduce((acc, t) => (netPointsHeader >= t.at ? t : acc), badgeThresholds[0])
 
+  const openHistory = () => setHistoryOpen(true)
+  const closeHistory = () => setHistoryOpen(false)
+
+  const historyItems = React.useMemo(() => {
+    const approvedComplaints = (complaints || [])
+      .filter((c) => c.status === 'resolved')
+      .map((c) => ({
+        id: c._id,
+        type: 'complaint',
+        title: c.title,
+        date: c.resolutionDetails?.resolvedAt || c.resolutionDetails?.completedAt || c.updatedAt,
+        start: c.resolutionDetails?.startedAt,
+        complete: c.resolutionDetails?.completedAt,
+        resolved: c.resolutionDetails?.resolvedAt,
+      }))
+    const completedTasks = (tasks || [])
+      .filter((t) => t.status === 'completed')
+      .map((t) => ({
+        id: t._id,
+        type: 'task',
+        title: t.title,
+        date: t.completedAt || t.updatedAt,
+        start: null,
+        complete: t.completedAt || null,
+        resolved: null,
+      }))
+    return [...approvedComplaints, ...completedTasks].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+  }, [complaints, tasks])
+
   return (
-    <div className="min-h-screen p-6 max-w-6xl mx-auto text-slate-100">
+    <div className="min-h-screen p-6 max-w-6xl mx-auto text-slate-100 animate-fade-in">
       {/* Lightbox */}
       {lightboxUrl && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLightboxUrl('')}>
@@ -308,7 +342,19 @@ export default function WorkerDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-slate-400">{user?.name}</span>
+          <div className="text-right hidden sm:block">
+            <div className="text-slate-200 font-medium leading-tight">{user?.name}</div>
+            {user?.workerId && (
+              <div className="text-xs text-slate-400">Worker ID: <span className="font-mono tracking-wide">{user.workerId}</span></div>
+            )}
+          </div>
+          <Avatar name={user?.name || 'Worker'} seed={user?.email || user?.name || user?.workerId || ''} size={36} />
+          <button
+            className="hidden sm:inline-flex rounded-lg border border-white/10 px-3 py-2 hover:bg-slate-800/60 btn-animated"
+            onClick={openHistory}
+          >
+            History
+          </button>
           <div className="hidden sm:flex items-center gap-2">
             <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 text-emerald-200 text-xs px-2 py-0.5">
               {currentBadge.name}
@@ -318,7 +364,7 @@ export default function WorkerDashboard() {
             </span>
           </div>
           <button
-            className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold px-3 py-2"
+            className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold px-3 py-2 btn-animated"
             onClick={logout}
           >
             Logout
@@ -344,9 +390,11 @@ export default function WorkerDashboard() {
               </div>
             )}
 
-            {/* Complaint List */}
+            {/* Complaint List (hide resolved from main list) */}
             <ul className="grid gap-3">
-              {complaints.map((c) => (
+              {complaints
+                .filter((c) => c.status !== 'resolved')
+                .map((c) => (
                 <li
                   key={c._id}
                   className="rounded-xl border border-white/10 p-4 bg-slate-900/60 transition hover:shadow-lg hover:shadow-emerald-500/5"
@@ -490,7 +538,7 @@ export default function WorkerDashboard() {
                           htmlFor={`file-before-${c._id}`}
                           className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
                           onDragOver={(e) => { e.preventDefault() }}
-                          onDrop={(e) => { e.preventDefault(); addFiles(c._id, 'before', e.dataTransfer.files) }}
+                          onDrop={async (e) => { e.preventDefault(); addFiles(c._id, 'before', e.dataTransfer.files); await handleUpload(c._id, 'before') }}
                         >
                           + Add image
                           <input
@@ -499,7 +547,7 @@ export default function WorkerDashboard() {
                             multiple
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => addFiles(c._id, 'before', e.target.files)}
+                            onChange={async (e) => { addFiles(c._id, 'before', e.target.files); await handleUpload(c._id, 'before') }}
                           />
                         </label>
                       </div>
@@ -553,7 +601,7 @@ export default function WorkerDashboard() {
                           htmlFor={`file-after-${c._id}`}
                           className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
                           onDragOver={(e) => { e.preventDefault() }}
-                          onDrop={(e) => { e.preventDefault(); addFiles(c._id, 'after', e.dataTransfer.files) }}
+                          onDrop={async (e) => { e.preventDefault(); addFiles(c._id, 'after', e.dataTransfer.files); await handleUpload(c._id, 'after') }}
                         >
                           + Add image
                           <input
@@ -562,7 +610,7 @@ export default function WorkerDashboard() {
                             multiple
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => addFiles(c._id, 'after', e.target.files)}
+                            onChange={async (e) => { addFiles(c._id, 'after', e.target.files); await handleUpload(c._id, 'after') }}
                           />
                         </label>
                       </div>
@@ -588,9 +636,9 @@ export default function WorkerDashboard() {
                 </li>
               ))}
 
-              {complaints.length === 0 && (
+              {complaints.filter((c) => c.status !== 'resolved').length === 0 && (
                 <li className="rounded-xl border border-white/10 p-6 text-slate-400">
-                  No assigned complaints yet.
+                  No pending, in-progress, or rejected complaints.
                 </li>
               )}
             </ul>
@@ -683,6 +731,272 @@ export default function WorkerDashboard() {
               )
             })()}
           </section>
+        </div>
+      )}
+      {/* Tasks Section (visible only for non-completed tasks) */}
+      {!loading && (
+        <div className="grid gap-4 md:grid-cols-2 mt-4">
+          <section className="rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur p-6 shadow-xl shadow-emerald-500/5">
+            <h3 className="text-lg font-semibold mb-1">Tasks</h3>
+            <p className="text-slate-400 text-sm mb-3">Tasks assigned to you by the municipal head.</p>
+            <ul className="grid gap-3">
+              {tasks.filter(t => t.status !== 'completed').map((t) => (
+                <li key={t._id} className="rounded-xl border border-white/10 p-4 bg-slate-900/60">
+                  <div className="flex items-start justify-between mb-1">
+                    <div>
+                      <div className="font-medium">{t.title}</div>
+                      <div className="text-slate-400 text-sm">{t.status}</div>
+                      {t.relatedComplaint && (
+                        <div className="text-xs text-slate-500 mt-0.5">Related complaint: {String(t.relatedComplaint).slice(-6)}</div>
+                      )}
+                      {t.description && (
+                        <p className="text-sm text-slate-300 mt-1 whitespace-pre-wrap">{t.description}</p>
+                      )}
+                    </div>
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-slate-100"
+                      value={t.status}
+                      onChange={(e) => updateTaskStatus(t._id, e.target.value)}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="assigned">Assigned</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+                  {/* If task has a related complaint, allow uploading images here as well */}
+                  {/* Try to resolve a complaint for this task even if relatedComplaint is missing */}
+                  {(() => {
+                    const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
+                      ? (t.relatedComplaint._id || '')
+                      : (t.relatedComplaint ? String(t.relatedComplaint) : '')
+                    let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
+                    // Fallback: try to match by title (case-insensitive, trimmed)
+                    if (!rel) {
+                      const tt = String(t.title || '').trim().toLowerCase()
+                      if (tt) {
+                        rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
+                      }
+                    }
+                    const cid = rel?._id
+                    if (!cid && !relId) return false
+                    return true
+                  })() && (
+                    (() => {
+                      const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
+                        ? (t.relatedComplaint._id || '')
+                        : (t.relatedComplaint ? String(t.relatedComplaint) : '')
+                      let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
+                      if (!rel) {
+                        const tt = String(t.title || '').trim().toLowerCase()
+                        if (tt) rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
+                      }
+                      const cid = rel?._id
+                      const hasServerAfter = rel ? ((rel.resolutionDetails?.afterImages || []).length > 0) : false
+                      const hasLocalAfter = cid ? ((localAfter[cid] || []).length > 0) : false
+                      return (
+                        cid ? (
+                          <div className="mt-3 grid grid-cols-2 gap-3">
+                            {/* Before */}
+                            <div>
+                              <div className="text-xs text-slate-400 mb-1">
+                                Before {(localBefore[cid] || []).length > 0 && (
+                                  <span className="text-slate-300">({(localBefore[cid] || []).length} selected)</span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                {((localBefore[cid]) || []).map((file, i) => (
+                                  <div key={`tb-${i}`} className="relative">
+                                    <img
+                                      src={(previewBefore[cid] || [])[i]}
+                                      alt="before"
+                                      className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
+                                      onClick={() => { setLightboxAlt('before'); setLightboxUrl((previewBefore[cid] || [])[i] || '') }}
+                                    />
+                                    <button
+                                      aria-label="Remove"
+                                      title="Remove"
+                                      onClick={() => removeFile(cid, 'before', i)}
+                                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                                <label
+                                  htmlFor={`task-file-before-${cid}`}
+                                  className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
+                                  onDragOver={(e) => { e.preventDefault() }}
+                                  onDrop={async (e) => { e.preventDefault(); addFiles(cid, 'before', e.dataTransfer.files); await handleUpload(cid, 'before') }}
+                                >
+                                  + Add image
+                                  <input
+                                    id={`task-file-before-${cid}`}
+                                    type="file"
+                                    multiple
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => { addFiles(cid, 'before', e.target.files); await handleUpload(cid, 'before') }}
+                                  />
+                                </label>
+                              </div>
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  onClick={() => handleUpload(cid, 'before')}
+                                  className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+                                  disabled={!((localBefore[cid] || []).length)}
+                                >
+                                  Upload
+                                </button>
+                                {(localBefore[cid] || []).length > 0 && (
+                                  <button
+                                    onClick={() => clearLocal(cid, 'before')}
+                                    className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {/* After */}
+                            <div>
+                              <div className="text-xs text-slate-400 mb-1">
+                                After {(localAfter[cid] || []).length > 0 && (
+                                  <span className="text-slate-300">({(localAfter[cid] || []).length} selected)</span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                {((localAfter[cid]) || []).map((file, i) => (
+                                  <div key={`ta-${i}`} className="relative">
+                                    <img
+                                      src={(previewAfter[cid] || [])[i]}
+                                      alt="after"
+                                      className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
+                                      onClick={() => { setLightboxAlt('after'); setLightboxUrl((previewAfter[cid] || [])[i] || '') }}
+                                    />
+                                    <button
+                                      aria-label="Remove"
+                                      title="Remove"
+                                      onClick={() => removeFile(cid, 'after', i)}
+                                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                                <label
+                                  htmlFor={`task-file-after-${cid}`}
+                                  className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
+                                  onDragOver={(e) => { e.preventDefault() }}
+                                  onDrop={async (e) => { e.preventDefault(); addFiles(cid, 'after', e.dataTransfer.files); await handleUpload(cid, 'after') }}
+                                >
+                                  + Add image
+                                  <input
+                                    id={`task-file-after-${cid}`}
+                                    type="file"
+                                    multiple
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => { addFiles(cid, 'after', e.target.files); await handleUpload(cid, 'after') }}
+                                  />
+                                </label>
+                              </div>
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  onClick={() => handleUpload(cid, 'after')}
+                                  className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+                                  disabled={!((localAfter[cid] || []).length)}
+                                >
+                                  Upload
+                                </button>
+                                {(localAfter[cid] || []).length > 0 && (
+                                  <button
+                                    onClick={() => clearLocal(cid, 'after')}
+                                    className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                        : (
+                          <div className="mt-2 text-xs text-amber-300/90">
+                            A related complaint could not be found for this task. To enable image uploads, please link this task to a complaint when creating it, or ensure the complaint is loaded.
+                          </div>
+                        )
+                      )
+                    })()
+                  )}
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {t.status !== 'in-progress' && t.status !== 'completed' && (
+                      <button
+                        className="rounded-lg border border-white/10 px-3 py-2 hover:bg-slate-800"
+                        onClick={() => updateTaskStatus(t._id, 'in-progress')}
+                      >
+                        Start Task
+                      </button>
+                    )}
+                    {t.status !== 'completed' && (
+                      <button
+                        className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => updateTaskStatus(t._id, 'completed')}
+                        disabled={(() => {
+                          // Gate completion on after image when a related complaint is resolvable
+                          const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
+                            ? (t.relatedComplaint._id || '')
+                            : (t.relatedComplaint ? String(t.relatedComplaint) : '')
+                          let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
+                          if (!rel) {
+                            const tt = String(t.title || '').trim().toLowerCase()
+                            if (tt) rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
+                          }
+                          const cid = rel?._id
+                          if (!cid) return false
+                          const hasServerAfter = (rel?.resolutionDetails?.afterImages || []).length > 0
+                          const hasLocalAfter = (localAfter[cid] || []).length > 0
+                          return !(hasServerAfter || hasLocalAfter)
+                        })()}
+                      >
+                        Mark Completed
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+              {tasks.filter(t => t.status !== 'completed').length === 0 && (
+                <li className="rounded-xl border border-white/10 p-6 text-slate-400">No pending tasks.</li>
+              )}
+            </ul>
+          </section>
+        </div>
+      )}
+      {/* Worker History Modal */}
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Your History</h3>
+              <button className="rounded-md border border-white/10 px-2 py-1 hover:bg-slate-800/60" onClick={closeHistory}>Close</button>
+            </div>
+            <ul className="divide-y divide-white/10 max-h-[70vh] overflow-auto">
+              {historyItems.map((h) => (
+                <li key={`${h.type}-${h.id}`} className="py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">[{h.type}] {h.title}</span>
+                    <span className="text-xs text-slate-400">{h.date ? new Date(h.date).toLocaleString() : '-'}</span>
+                  </div>
+                  <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-slate-400">
+                    {h.start && <div><span className="text-slate-500">Start:</span> {new Date(h.start).toLocaleString()}</div>}
+                    {h.complete && <div><span className="text-slate-500">Complete:</span> {new Date(h.complete).toLocaleString()}</div>}
+                    {h.resolved && <div><span className="text-slate-500">Resolved:</span> {new Date(h.resolved).toLocaleString()}</div>}
+                  </div>
+                </li>
+              ))}
+              {historyItems.length === 0 && <li className="py-2 text-slate-400">No history yet.</li>}
+            </ul>
+          </div>
         </div>
       )}
     </div>

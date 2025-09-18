@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
+import ImageWithFallback from '../../components/ImageWithFallback'
 
 export default function TrackerPage() {
   const [complaints, setComplaints] = useState([])
@@ -9,11 +10,38 @@ export default function TrackerPage() {
 
   const [filters, setFilters] = useState({ workerId: '', status: 'all', category: 'all', q: '' })
   const [reward, setReward] = useState({}) // { [complaintId]: { points, notes } }
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyItems, setHistoryItems] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const [historyFor, setHistoryFor] = useState(null)
+  const [historyComplaint, setHistoryComplaint] = useState(null)
 
   const API_BASE = import.meta.env?.VITE_API_BASE || ''
   const toUrl = (u) => {
     if (!u) return ''
     return u.startsWith('http') ? u : `${API_BASE}${u}`
+  }
+
+  const openHistory = async (id) => {
+    setHistoryOpen(true)
+    setHistoryLoading(true)
+    setHistoryError('')
+    setHistoryItems([])
+    setHistoryFor(id)
+    setHistoryComplaint(null)
+    try {
+      const [u, c] = await Promise.all([
+        api.get(`/api/complaints/${id}/updates`),
+        api.get(`/api/complaints/${id}`)
+      ])
+      setHistoryItems(u.data?.data || [])
+      setHistoryComplaint(c.data?.data || null)
+    } catch (e) {
+      setHistoryError(e?.response?.data?.error || 'Failed to load history')
+    } finally {
+      setHistoryLoading(false)
+    }
   }
 
   const resolveComplaint = async (id) => {
@@ -31,15 +59,15 @@ export default function TrackerPage() {
   }
 
   const rejectComplaint = async (id) => {
-    const payload = reward[id] || { penaltyPoints: 0, notes: '' }
+    const payload = reward[id] || { penaltyPoints: 0, notes: '', workerId: '' }
     try {
       let pts = Number(payload.penaltyPoints || 0)
       if (!Number.isFinite(pts) || pts <= 0) pts = 10 // default penalty = 10
       const bodies = [
-        { points: pts, penaltyPoints: pts, notes: payload.notes },
-        { penaltyPoints: pts, notes: payload.notes },
-        { penalty: { points: pts }, notes: payload.notes },
-        { penalty: pts, notes: payload.notes },
+        { points: pts, penaltyPoints: pts, notes: payload.notes, workerId: payload.workerId, createTask: !!payload.workerId },
+        { penaltyPoints: pts, notes: payload.notes, workerId: payload.workerId, createTask: !!payload.workerId },
+        { penalty: { points: pts }, notes: payload.notes, workerId: payload.workerId, createTask: !!payload.workerId },
+        { penalty: pts, notes: payload.notes, workerId: payload.workerId, createTask: !!payload.workerId },
       ]
       let ok = false
       let lastErr
@@ -56,7 +84,7 @@ export default function TrackerPage() {
       if (!ok) throw lastErr || new Error('All reject shapes failed')
       const { data } = await api.get('/api/complaints')
       setComplaints(data.data || [])
-      setReward((r) => ({ ...r, [id]: { points: '', penaltyPoints: '', notes: '' } }))
+      setReward((r) => ({ ...r, [id]: { points: '', penaltyPoints: '', notes: '', workerId: '' } }))
     } catch (e) {
       console.error('Reject failed', e?.response?.data || e)
       alert(e?.response?.data?.error || e?.message || 'Failed to reject complaint')
@@ -134,9 +162,14 @@ export default function TrackerPage() {
         <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(c => (
             <li key={c._id} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-2">
                 <div className="font-semibold pr-3">{c.title}</div>
-                <span className={badge(c.status)}>{c.status}</span>
+                <div className="flex items-center gap-2">
+                  {c.status === 'resolved' && (
+                    <button className="text-xs rounded-md border border-white/10 px-2 py-1 hover:bg-slate-800/60" onClick={() => openHistory(c._id)}>History</button>
+                  )}
+                  <span className={badge(c.status)}>{c.status}</span>
+                </div>
               </div>
               <div className="mt-1 text-sm text-slate-400">{c.category}</div>
               {c.assignedTo?.workerId && (
@@ -158,7 +191,7 @@ export default function TrackerPage() {
                     <div className="text-xs text-slate-400 mb-1">Before</div>
                     <div className="grid grid-cols-2 gap-2">
                       {(c.resolutionDetails?.beforeImages || []).map((src, i) => (
-                        <img key={i} src={toUrl(src)} alt="before" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => window.open(toUrl(src), '_blank')} />
+                        <ImageWithFallback key={i} src={toUrl(src)} alt="before" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => window.open(toUrl(src), '_blank')} />
                       ))}
                     </div>
                   </div>
@@ -166,7 +199,7 @@ export default function TrackerPage() {
                     <div className="text-xs text-slate-400 mb-1">After</div>
                     <div className="grid grid-cols-2 gap-2">
                       {(c.resolutionDetails?.afterImages || []).map((src, i) => (
-                        <img key={i} src={toUrl(src)} alt="after" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => window.open(toUrl(src), '_blank')} />
+                        <ImageWithFallback key={i} src={toUrl(src)} alt="after" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => window.open(toUrl(src), '_blank')} />
                       ))}
                     </div>
                   </div>
@@ -188,7 +221,13 @@ export default function TrackerPage() {
                     onChange={(e)=>setReward(r => ({...r, [c._id]: { ...(r[c._id]||{}), penaltyPoints: e.target.value }}))}
                     placeholder="10"/>
                 </div>
-                <div className="col-span-1 md:col-span-1"></div>
+                <div>
+                  <label className="text-xs text-slate-400">Assign Worker (optional for follow-up task)</label>
+                  <input list="workers-datalist" className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-slate-100" placeholder="Worker ID or select"
+                    value={reward[c._id]?.workerId || ''}
+                    onChange={(e)=>setReward(r => ({...r, [c._id]: { ...(r[c._id]||{}), workerId: e.target.value }}))}
+                  />
+                </div>
                 <div className="col-span-3">
                   <label className="text-xs text-slate-400">Notes (for approval or rejection)</label>
                   <input className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-slate-100"
@@ -212,6 +251,80 @@ export default function TrackerPage() {
           <option key={w._id || w.workerId} value={w.workerId}>{w.name} • {w.phone}</option>
         ))}
       </datalist>
+      {/* History Modal */}
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Complaint History</h3>
+              <button className="rounded-md border border-white/10 px-2 py-1 hover:bg-slate-800/60" onClick={() => setHistoryOpen(false)}>Close</button>
+            </div>
+            {historyLoading ? (
+              <div>Loading...</div>
+            ) : historyError ? (
+              <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-200 px-3 py-2">{historyError}</div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <div className="font-semibold mb-2">Updates</div>
+                  <ul className="divide-y divide-white/10 max-h-80 overflow-auto">
+                    {historyItems.map((h) => (
+                      <li key={h._id} className="py-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{h.action}</span>
+                          <span className="text-xs text-slate-400">{new Date(h.createdAt).toLocaleString()}</span>
+                        </div>
+                        {h.notes && <div className="text-slate-300 mt-1">{h.notes}</div>}
+                        {/* Show select meta fields nicely, else raw JSON */}
+                        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-400">
+                          {h.by && (
+                            <div><span className="text-slate-500">By:</span> {h.by.name} ({h.by.role})</div>
+                          )}
+                          {h.meta?.workerId && (
+                            <div><span className="text-slate-500">Worker:</span> {h.meta.workerId}{h.meta.workerName ? ` (${h.meta.workerName})` : ''}</div>
+                          )}
+                          {(h.meta?.points || h.meta?.points === 0) && (
+                            <div><span className="text-slate-500">Reward:</span> {h.meta.points}</div>
+                          )}
+                          {h.meta?.startedAt && (
+                            <div><span className="text-slate-500">Start:</span> {new Date(h.meta.startedAt).toLocaleString()}</div>
+                          )}
+                          {h.meta?.completedAt && (
+                            <div><span className="text-slate-500">Complete:</span> {new Date(h.meta.completedAt).toLocaleString()}</div>
+                          )}
+                          {h.meta?.resolvedAt && (
+                            <div><span className="text-slate-500">Resolved:</span> {new Date(h.meta.resolvedAt).toLocaleString()}</div>
+                          )}
+                        </div>
+                        {h.meta && !(h.meta.workerId || h.meta.workerName || 'points' in h.meta || h.meta.startedAt || h.meta.completedAt || h.meta.resolvedAt) && (
+                          <pre className="mt-1 text-xs text-slate-400 bg-slate-800/60 rounded-md p-2 overflow-auto">{JSON.stringify(h.meta, null, 2)}</pre>
+                        )}
+                      </li>
+                    ))}
+                    {historyItems.length === 0 && <li className="py-2 text-slate-400">No history entries.</li>}
+                  </ul>
+                </div>
+                <div>
+                  <div className="font-semibold mb-2">Images</div>
+                  {!historyComplaint ? (
+                    <div className="text-slate-400">No complaint details.</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 max-h-80 overflow-auto">
+                      {((historyComplaint.resolutionDetails?.beforeImages) || []).map((src, i) => (
+                        <img key={`b-${i}`} src={toUrl(src)} alt="before" className="rounded-lg border border-white/10 object-cover h-28 w-full" />
+                      ))}
+                      {((historyComplaint.resolutionDetails?.afterImages) || []).map((src, i) => (
+                        <img key={`a-${i}`} src={toUrl(src)} alt="after" className="rounded-lg border border-white/10 object-cover h-28 w-full" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
