@@ -8,7 +8,7 @@ var vite_config_default = defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: "https://swachhata-setu.onrender.com",
         changeOrigin: true,
         secure: false
       }
