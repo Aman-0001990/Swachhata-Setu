@@ -37,7 +37,25 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    // Optionally handle 401 to logout, etc.
+    // Handle 401: clear token and redirect to appropriate login
+    if (err?.response?.status === 401) {
+      try {
+        localStorage.removeItem('token')
+      } catch (_) {}
+      // Best-effort redirect depending on current path
+      try {
+        if (typeof window !== 'undefined') {
+          const path = window.location.pathname || ''
+          if (path.startsWith('/municipal')) {
+            window.location.replace('/municipal-login')
+          } else if (path.startsWith('/worker')) {
+            window.location.replace('/worker-login')
+          } else {
+            window.location.replace('/login')
+          }
+        }
+      } catch (_) {}
+    }
     return Promise.reject(err)
   }
 )

@@ -8,7 +8,7 @@ export default function TrackerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [filters, setFilters] = useState({ workerId: '', status: 'all', category: 'all', q: '' })
+  const [filters, setFilters] = useState({ workerId: '', status: 'pending', category: 'all', q: '' })
   const [reward, setReward] = useState({}) // { [complaintId]: { points, notes } }
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyItems, setHistoryItems] = useState([])
@@ -45,13 +45,13 @@ export default function TrackerPage() {
   }
 
   const resolveComplaint = async (id) => {
-    const payload = reward[id] || { points: 0, notes: '' }
+    const payload = reward[id] || { points: 0, notes: '', workerId: '' }
     try {
       let pts = Number(payload.points || 0)
       if (!Number.isFinite(pts) || pts <= 0) pts = 10 // default reward = 10
-      await api.put(`/api/complaints/${id}/resolve`, { points: pts, notes: payload.notes })
-      const { data } = await api.get('/api/complaints')
-      setComplaints(data.data || [])
+      await api.put(`/api/complaints/${id}/resolve`, { points: pts, notes: payload.notes, workerId: payload.workerId })
+      // Optimistically remove from current list so it disappears from tracker immediately
+      setComplaints((list) => list.filter((c) => c._id !== id))
       setReward((r) => ({ ...r, [id]: { points: '', notes: '' } }))
     } catch (e) {
       alert(e?.response?.data?.error || 'Failed to resolve complaint')

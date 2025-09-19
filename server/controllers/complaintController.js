@@ -23,7 +23,7 @@ const storage = new CloudinaryStorage({
 // @route   PUT /api/complaints/:id/resolve
 // @access  Private (municipal)
 exports.resolveAndReward = asyncHandler(async (req, res, next) => {
-  const { points = 0, notes } = req.body;
+  const { points = 0, notes, workerId } = req.body;
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return next(new ErrorResponse('Invalid complaint id', 400));
   }
@@ -44,14 +44,30 @@ exports.resolveAndReward = asyncHandler(async (req, res, next) => {
   complaint.resolutionDetails.resolvedBy = req.user.id;
   if (notes) complaint.resolutionDetails.notes = notes;
 
-  // Reward worker if assigned and points provided
-  if (!complaint.pointsAwarded && complaint.assignedTo && Number(points) > 0) {
-    const worker = await User.findById(complaint.assignedTo._id);
-    if (worker) {
-      worker.points += parseInt(points);
-      worker.pointsHistory = worker.pointsHistory || [];
-      worker.pointsHistory.push({ points: parseInt(points), reason: `Reward for resolving complaint ${complaint._id}`, date: new Date() });
-      await worker.save();
+  // Reward worker if points provided. Prefer explicit body.workerId (supports public workerId like 'WRK-0001' or Mongo ObjectId);
+  // else fallback to complaint.assignedTo when present.
+  if (!complaint.pointsAwarded && Number(points) > 0) {
+    let targetWorker = null;
+    if (workerId) {
+      if (typeof workerId === 'string' && !mongoose.Types.ObjectId.isValid(workerId)) {
+        const manual = workerId.trim().toUpperCase();
+        targetWorker = await User.findOne({ workerId: manual, role: 'worker' });
+        if (!targetWorker) return next(new ErrorResponse('Worker ID does not exist', 404));
+      } else {
+        if (!mongoose.Types.ObjectId.isValid(workerId)) {
+          return next(new ErrorResponse('Invalid worker id', 400));
+        }
+        targetWorker = await User.findById(workerId);
+      }
+    } else if (complaint.assignedTo) {
+      targetWorker = await User.findById(complaint.assignedTo._id || complaint.assignedTo);
+    }
+
+    if (targetWorker) {
+      targetWorker.points = (targetWorker.points || 0) + parseInt(points);
+      targetWorker.pointsHistory = targetWorker.pointsHistory || [];
+      targetWorker.pointsHistory.push({ points: parseInt(points), reason: `Reward for resolving complaint ${complaint._id}`, date: new Date() });
+      await targetWorker.save();
       complaint.pointsAwarded = true;
       // Persist reward on complaint for dashboard summaries
       complaint.rewardPoints = parseInt(points);
@@ -69,8 +85,8 @@ exports.resolveAndReward = asyncHandler(async (req, res, next) => {
       notes,
       meta: {
         points: Number(points) || 0,
-        worker: complaint.assignedTo ? String(complaint.assignedTo._id) : null,
-        workerId: complaint.assignedTo ? complaint.assignedTo.workerId : null,
+        worker: complaint.assignedTo ? String(complaint.assignedTo._id || complaint.assignedTo) : null,
+        workerId: complaint.assignedTo ? complaint.assignedTo.workerId : (workerId || null),
         workerName: complaint.assignedTo ? complaint.assignedTo.name : null,
         startedAt: complaint.resolutionDetails?.startedAt,
         completedAt: complaint.resolutionDetails?.completedAt,
