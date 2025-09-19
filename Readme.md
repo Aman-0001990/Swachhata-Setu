@@ -7,7 +7,7 @@ A smart, Indian-first waste management platform designed to connect citizens, wo
 ## 🚀 Live Demo
 
 Check out the live version of the app here:  
-[Waste Management System Live](https://swachhata-setu.netlify.app/) — deployed with Netlify.
+[Waste Management System Live](https://swachhata-setu-1.netlify.app/) — deployed with Netlify.
 
 ---
 
