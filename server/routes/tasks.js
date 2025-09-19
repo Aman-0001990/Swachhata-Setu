@@ -6,7 +6,10 @@ const {
   getTask,
   assignTask,
   updateTaskStatus,
-  deleteTask
+  deleteTask,
+  uploadTaskImages,
+  approveTask,
+  getTaskUpdates
 } = require('../controllers/taskController');
 
 const router = express.Router();
@@ -26,5 +29,14 @@ router
 
 router.put('/:id/assign', authorize('municipal'), assignTask);
 router.put('/:id/status', authorize('worker', 'municipal'), updateTaskStatus);
+
+// Upload before/after images for a task (assigned worker)
+router.post('/:id/images', authorize('worker', 'municipal'), ...uploadTaskImages);
+
+// Approve and archive a completed task (municipal head)
+router.put('/:id/approve', authorize('municipal'), approveTask);
+
+// Task updates (history)
+router.get('/:id/updates', authorize('worker', 'municipal'), getTaskUpdates);
 
 module.exports = router;

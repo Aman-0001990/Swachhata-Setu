@@ -17,6 +17,11 @@ const TaskSchema = new mongoose.Schema(
       beforeImages: [{ type: String }],
       afterImages: [{ type: String }]
     },
+    // Approval & archival
+    approved: { type: Boolean, default: false },
+    approvedAt: { type: Date },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    archived: { type: Boolean, default: false },
     rewardPoints: { type: Number, default: 0 },
     penaltyPoints: { type: Number, default: 0 },
     location: {

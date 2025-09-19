@@ -1,8 +1,23 @@
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
+const TaskUpdate = require('../models/TaskUpdate');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../utils/cloudinary');
+
+// Cloudinary-backed multer storage for task images
+const taskImageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'wms/tasks',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
+  },
+});
+const uploadTask = multer({ storage: taskImageStorage });
 
 // @desc    Create a task (municipal)
 // @route   POST /api/tasks
@@ -44,6 +59,10 @@ exports.createTask = asyncHandler(async (req, res, next) => {
   };
 
   const task = await Task.create(payload);
+  // history: created
+  try {
+    await TaskUpdate.create({ task: task._id, action: 'created', by: req.user.id, meta: { assignedTo: task.assignedTo } });
+  } catch (_) {}
   res.status(201).json({ success: true, data: task });
 });
 
@@ -52,6 +71,9 @@ exports.createTask = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.getTasks = asyncHandler(async (req, res, next) => {
   const filter = {};
+  // by default, exclude archived tasks from tracker lists
+  const archived = String(req.query.archived || 'false').toLowerCase() === 'true';
+  filter.archived = archived;
   if (req.user.role === 'worker') {
     filter.assignedTo = req.user.id;
   } else if (req.user.role === 'citizen') {
@@ -73,6 +95,95 @@ exports.getTask = asyncHandler(async (req, res, next) => {
   const task = await Task.findById(req.params.id).populate('createdBy', 'name role').populate('assignedTo', 'name role');
   if (!task) return next(new ErrorResponse('Task not found', 404));
   res.status(200).json({ success: true, data: task });
+});
+
+// @desc    Upload images for a task (before/after)
+// @route   POST /api/tasks/:id/images?type=before|after
+// @access  Private (worker assigned to the task)
+exports.uploadTaskImages = [
+  uploadTask.array('images', 5),
+  asyncHandler(async (req, res, next) => {
+    const { id } = req.params;
+    const type = req.query.type === 'after' ? 'afterImages' : 'beforeImages';
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new ErrorResponse('Invalid task id', 400));
+    }
+    const task = await Task.findById(id);
+    if (!task) return next(new ErrorResponse('Task not found', 404));
+
+    // Only assigned worker or municipal can upload
+    if (
+      req.user.role === 'worker' && task.assignedTo?.toString() !== req.user.id
+    ) {
+      return next(new ErrorResponse('Not authorized', 403));
+    }
+
+    task.resolutionDetails = task.resolutionDetails || {};
+    task.resolutionDetails[type] = task.resolutionDetails[type] || [];
+    const uploadedUrls = (req.files || []).map((f) => f.path);
+    task.resolutionDetails[type].push(...uploadedUrls);
+
+    // set started/completed timestamps heuristically
+    if (!task.resolutionDetails.startedAt) task.resolutionDetails.startedAt = new Date();
+    if (type === 'afterImages') task.resolutionDetails.completedAt = new Date();
+
+    await task.save();
+    // history: images uploaded
+    try {
+      await TaskUpdate.create({ task: task._id, action: 'images-uploaded', by: req.user.id, meta: { type, count: uploadedUrls.length } });
+    } catch (_) {}
+    res.status(200).json({ success: true, data: task });
+  })
+];
+
+// @desc    Approve a completed task and archive it (municipal head)
+// @route   PUT /api/tasks/:id/approve
+// @access  Private (municipal)
+exports.approveTask = asyncHandler(async (req, res, next) => {
+  const { notes } = req.body || {};
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid task id', 400));
+  }
+  const task = await Task.findById(id);
+  if (!task) return next(new ErrorResponse('Task not found', 404));
+  // mark approved + archive, ensure status completed and timestamp set
+  task.approved = true;
+  task.approvedAt = new Date();
+  task.approvedBy = req.user.id;
+  task.archived = true;
+  if (task.status !== 'completed') task.status = 'completed';
+  if (!task.completedAt) task.completedAt = new Date();
+  await task.save();
+
+  try {
+    await TaskUpdate.create({ task: task._id, action: 'approved', by: req.user.id, notes });
+  } catch (_) {}
+
+  res.status(200).json({ success: true, data: task });
+});
+
+// @desc    Get task updates (history)
+// @route   GET /api/tasks/:id/updates
+// @access  Private (municipal or assigned worker)
+exports.getTaskUpdates = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new ErrorResponse('Invalid task id', 400));
+  }
+  const task = await Task.findById(id);
+  if (!task) return next(new ErrorResponse('Task not found', 404));
+  if (
+    req.user.role !== 'municipal' &&
+    !(req.user.role === 'worker' && task.assignedTo?.toString() === req.user.id)
+  ) {
+    return next(new ErrorResponse('Not authorized', 403));
+  }
+  const updates = await TaskUpdate.find({ task: id })
+    .sort({ createdAt: -1 })
+    .populate('by', 'name role workerId')
+    .lean();
+  res.status(200).json({ success: true, count: updates.length, data: updates });
 });
 
 // @desc    Assign/ Reassign task to a worker (municipal)
@@ -102,6 +213,10 @@ exports.assignTask = asyncHandler(async (req, res, next) => {
   task.assignedTo = workerObjectId;
   task.status = 'assigned';
   await task.save();
+  // history: assigned
+  try {
+    await TaskUpdate.create({ task: task._id, action: 'assigned', by: req.user.id, meta: { assignedTo: workerObjectId } });
+  } catch (_) {}
   res.status(200).json({ success: true, data: task });
 });
 
@@ -126,11 +241,21 @@ exports.updateTaskStatus = asyncHandler(async (req, res, next) => {
   task.status = status;
   if (status === 'completed') {
     task.completedAt = new Date();
+    task.resolutionDetails = task.resolutionDetails || {};
+    task.resolutionDetails.completedAt = task.resolutionDetails.completedAt || new Date();
   } else if (task.completedAt) {
     // if moving away from completed, clear stamp
     task.completedAt = undefined;
   }
+  if (status === 'in-progress') {
+    task.resolutionDetails = task.resolutionDetails || {};
+    if (!task.resolutionDetails.startedAt) task.resolutionDetails.startedAt = new Date();
+  }
   await task.save();
+  // history: status change
+  try {
+    await TaskUpdate.create({ task: task._id, action: status, by: req.user.id });
+  } catch (_) {}
   res.status(200).json({ success: true, data: task });
 });
 

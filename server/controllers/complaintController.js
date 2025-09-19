@@ -1,5 +1,3 @@
-const path = require('path');
-const fs = require('fs');
 const multer = require('multer');
 const mongoose = require('mongoose');
 const Complaint = require('../models/Complaint');
@@ -8,22 +6,17 @@ const Task = require('../models/Task');
 const ComplaintUpdate = require('../models/ComplaintUpdate');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../utils/cloudinary');
 
-// Configure multer storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Save inside server/uploads/complaints
-    const dir = path.join(__dirname, '../uploads/complaints');
-    // Ensure the directory exists
-    fs.mkdir(dir, { recursive: true }, (err) => {
-      if (err) return cb(err, dir);
-      cb(null, dir);
-    });
+// Configure Cloudinary-backed multer storage
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'wms/complaints',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname.replace(/\s+/g, '_'));
-  }
 });
 
 // @desc    Municipal: Mark complaint resolved and optionally reward worker
@@ -110,7 +103,8 @@ exports.createComplaint = asyncHandler(async (req, res, next) => {
 
   // Attach uploaded images if any
   if (req.files && req.files.length > 0) {
-    payload.images = req.files.map(f => `/uploads/complaints/${path.basename(f.path)}`);
+    // multer-storage-cloudinary sets f.path to the Cloudinary secure URL
+    payload.images = req.files.map(f => f.path);
   }
 
   const complaint = await Complaint.create(payload);
@@ -393,7 +387,8 @@ exports.uploadResolutionImages = [
     const field = req.query.type === 'after' ? 'afterImages' : 'beforeImages';
     complaint.resolutionDetails = complaint.resolutionDetails || {};
     complaint.resolutionDetails[field] = complaint.resolutionDetails[field] || [];
-    const added = (req.files || []).map(f => `/uploads/complaints/${path.basename(f.path)}`);
+    // Store Cloudinary URLs
+    const added = (req.files || []).map(f => f.path);
     complaint.resolutionDetails[field].push(...added);
 
     await complaint.save();

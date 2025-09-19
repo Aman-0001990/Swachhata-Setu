@@ -48,6 +48,27 @@ export default function WorkerDashboard() {
     setTimeout(() => setToast(null), 2500)
   }
 
+  // Upload images for Tasks (before/after)
+  const uploadTaskImages = async (taskId, type, files) => {
+    const form = new FormData()
+    for (const f of files) form.append('images', f)
+    try {
+      await api.post(`/api/tasks/${taskId}/images?type=${type}`, form)
+      const { data } = await api.get('/api/tasks')
+      setTasks(data.data)
+      // Auto-set task to in-progress on first upload if it isn't already
+      const t = (data?.data || []).find((x) => x._id === taskId)
+      if (t && t.status !== 'in-progress' && t.status !== 'completed') {
+        try { await api.put(`/api/tasks/${taskId}/status`, { status: 'in-progress' }) } catch (_) {}
+        const refreshed = await api.get('/api/tasks')
+        setTasks(refreshed.data.data)
+      }
+      showToast(type === 'before' ? 'Task before images uploaded' : 'Task after images uploaded', 'success')
+    } catch (e) {
+      showToast(e?.response?.data?.error || 'Failed to upload task images', 'error')
+    }
+  }
+
   // ------------------------
   // Data Load
   // ------------------------
@@ -244,10 +265,14 @@ export default function WorkerDashboard() {
     }
   }
 
-  const handleUpload = async (id, type) => {
+  const handleUpload = async (id, type, isTask = false) => {
     const files = (type === 'before' ? localBefore[id] : localAfter[id]) || []
     if (!files.length) return
-    await uploadImages(id, type, files)
+    if (isTask) {
+      await uploadTaskImages(id, type, files)
+    } else {
+      await uploadImages(id, type, files)
+    }
     clearLocal(id, type)
   }
 
@@ -764,171 +789,143 @@ export default function WorkerDashboard() {
                       <option value="completed">Completed</option>
                     </select>
                   </div>
-                  {/* If task has a related complaint, allow uploading images here as well */}
-                  {/* Try to resolve a complaint for this task even if relatedComplaint is missing */}
-                  {(() => {
-                    const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
-                      ? (t.relatedComplaint._id || '')
-                      : (t.relatedComplaint ? String(t.relatedComplaint) : '')
-                    let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
-                    // Fallback: try to match by title (case-insensitive, trimmed)
-                    if (!rel) {
-                      const tt = String(t.title || '').trim().toLowerCase()
-                      if (tt) {
-                        rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
-                      }
-                    }
-                    const cid = rel?._id
-                    if (!cid && !relId) return false
-                    return true
-                  })() && (
-                    (() => {
-                      const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
-                        ? (t.relatedComplaint._id || '')
-                        : (t.relatedComplaint ? String(t.relatedComplaint) : '')
-                      let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
-                      if (!rel) {
-                        const tt = String(t.title || '').trim().toLowerCase()
-                        if (tt) rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
-                      }
-                      const cid = rel?._id
-                      const hasServerAfter = rel ? ((rel.resolutionDetails?.afterImages || []).length > 0) : false
-                      const hasLocalAfter = cid ? ((localAfter[cid] || []).length > 0) : false
-                      return (
-                        cid ? (
-                          <div className="mt-3 grid grid-cols-2 gap-3">
-                            {/* Before */}
-                            <div>
-                              <div className="text-xs text-slate-400 mb-1">
-                                Before {(localBefore[cid] || []).length > 0 && (
-                                  <span className="text-slate-300">({(localBefore[cid] || []).length} selected)</span>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                {((localBefore[cid]) || []).map((file, i) => (
-                                  <div key={`tb-${i}`} className="relative">
-                                    <img
-                                      src={(previewBefore[cid] || [])[i]}
-                                      alt="before"
-                                      className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
-                                      onClick={() => { setLightboxAlt('before'); setLightboxUrl((previewBefore[cid] || [])[i] || '') }}
-                                    />
-                                    <button
-                                      aria-label="Remove"
-                                      title="Remove"
-                                      onClick={() => removeFile(cid, 'before', i)}
-                                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
-                                <label
-                                  htmlFor={`task-file-before-${cid}`}
-                                  className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
-                                  onDragOver={(e) => { e.preventDefault() }}
-                                  onDrop={async (e) => { e.preventDefault(); addFiles(cid, 'before', e.dataTransfer.files); await handleUpload(cid, 'before') }}
-                                >
-                                  + Add image
-                                  <input
-                                    id={`task-file-before-${cid}`}
-                                    type="file"
-                                    multiple
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => { addFiles(cid, 'before', e.target.files); await handleUpload(cid, 'before') }}
-                                  />
-                                </label>
-                              </div>
-                              <div className="mt-2 flex gap-2">
-                                <button
-                                  onClick={() => handleUpload(cid, 'before')}
-                                  className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
-                                  disabled={!((localBefore[cid] || []).length)}
-                                >
-                                  Upload
-                                </button>
-                                {(localBefore[cid] || []).length > 0 && (
-                                  <button
-                                    onClick={() => clearLocal(cid, 'before')}
-                                    className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
-                                  >
-                                    Clear
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {/* After */}
-                            <div>
-                              <div className="text-xs text-slate-400 mb-1">
-                                After {(localAfter[cid] || []).length > 0 && (
-                                  <span className="text-slate-300">({(localAfter[cid] || []).length} selected)</span>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                {((localAfter[cid]) || []).map((file, i) => (
-                                  <div key={`ta-${i}`} className="relative">
-                                    <img
-                                      src={(previewAfter[cid] || [])[i]}
-                                      alt="after"
-                                      className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
-                                      onClick={() => { setLightboxAlt('after'); setLightboxUrl((previewAfter[cid] || [])[i] || '') }}
-                                    />
-                                    <button
-                                      aria-label="Remove"
-                                      title="Remove"
-                                      onClick={() => removeFile(cid, 'after', i)}
-                                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
-                                <label
-                                  htmlFor={`task-file-after-${cid}`}
-                                  className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
-                                  onDragOver={(e) => { e.preventDefault() }}
-                                  onDrop={async (e) => { e.preventDefault(); addFiles(cid, 'after', e.dataTransfer.files); await handleUpload(cid, 'after') }}
-                                >
-                                  + Add image
-                                  <input
-                                    id={`task-file-after-${cid}`}
-                                    type="file"
-                                    multiple
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => { addFiles(cid, 'after', e.target.files); await handleUpload(cid, 'after') }}
-                                  />
-                                </label>
-                              </div>
-                              <div className="mt-2 flex gap-2">
-                                <button
-                                  onClick={() => handleUpload(cid, 'after')}
-                                  className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
-                                  disabled={!((localAfter[cid] || []).length)}
-                                >
-                                  Upload
-                                </button>
-                                {(localAfter[cid] || []).length > 0 && (
-                                  <button
-                                    onClick={() => clearLocal(cid, 'after')}
-                                    className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
-                                  >
-                                    Clear
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                  {/* Task Images (before/after) - upload directly to task */}
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    {/* Before */}
+                    <div>
+                      <div className="text-xs text-slate-400 mb-1">
+                        Before {(localBefore[t._id] || []).length > 0 && (
+                          <span className="text-slate-300">({(localBefore[t._id] || []).length} selected)</span>
+                        )}
+                      </div>
+                      {/* Existing server images */}
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        {(t.resolutionDetails?.beforeImages || []).map((u, i) => (
+                          <img key={`tsb-${i}`} src={toUrl(u)} alt="before" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => { setLightboxAlt('before'); setLightboxUrl(toUrl(u)) }} />
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {((localBefore[t._id]) || []).map((file, i) => (
+                          <div key={`tb-${i}`} className="relative">
+                            <img
+                              src={(previewBefore[t._id] || [])[i]}
+                              alt="before"
+                              className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
+                              onClick={() => { setLightboxAlt('before'); setLightboxUrl((previewBefore[t._id] || [])[i] || '') }}
+                            />
+                            <button
+                              aria-label="Remove"
+                              title="Remove"
+                              onClick={() => removeFile(t._id, 'before', i)}
+                              className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
+                            >
+                              ×
+                            </button>
                           </div>
-                        )
-                        : (
-                          <div className="mt-2 text-xs text-amber-300/90">
-                            A related complaint could not be found for this task. To enable image uploads, please link this task to a complaint when creating it, or ensure the complaint is loaded.
+                        ))}
+                        <label
+                          htmlFor={`task-file-before-${t._id}`}
+                          className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
+                          onDragOver={(e) => { e.preventDefault() }}
+                          onDrop={async (e) => { e.preventDefault(); addFiles(t._id, 'before', e.dataTransfer.files); await handleUpload(t._id, 'before', true) }}
+                        >
+                          + Add image
+                          <input
+                            id={`task-file-before-${t._id}`}
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => { addFiles(t._id, 'before', e.target.files); await handleUpload(t._id, 'before', true) }}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => handleUpload(t._id, 'before', true)}
+                          className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+                          disabled={!((localBefore[t._id] || []).length)}
+                        >
+                          Upload
+                        </button>
+                        {(localBefore[t._id] || []).length > 0 && (
+                          <button
+                            onClick={() => clearLocal(t._id, 'before')}
+                            className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* After */}
+                    <div>
+                      <div className="text-xs text-slate-400 mb-1">
+                        After {(localAfter[t._id] || []).length > 0 && (
+                          <span className="text-slate-300">({(localAfter[t._id] || []).length} selected)</span>
+                        )}
+                      </div>
+                      {/* Existing server images */}
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        {(t.resolutionDetails?.afterImages || []).map((u, i) => (
+                          <img key={`tsa-${i}`} src={toUrl(u)} alt="after" className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in" onClick={() => { setLightboxAlt('after'); setLightboxUrl(toUrl(u)) }} />
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {((localAfter[t._id]) || []).map((file, i) => (
+                          <div key={`ta-${i}`} className="relative">
+                            <img
+                              src={(previewAfter[t._id] || [])[i]}
+                              alt="after"
+                              className="rounded-lg border border-white/10 object-cover h-24 w-full cursor-zoom-in"
+                              onClick={() => { setLightboxAlt('after'); setLightboxUrl((previewAfter[t._id] || [])[i] || '') }}
+                            />
+                            <button
+                              aria-label="Remove"
+                              title="Remove"
+                              onClick={() => removeFile(t._id, 'after', i)}
+                              className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-slate-100 text-xs"
+                            >
+                              ×
+                            </button>
                           </div>
-                        )
-                      )
-                    })()
-                  )}
+                        ))}
+                        <label
+                          htmlFor={`task-file-after-${t._id}`}
+                          className="flex items-center justify-center h-24 w-full rounded-lg border border-dashed border-white/10 bg-slate-900/60 hover:bg-slate-800/70 cursor-pointer text-slate-300"
+                          onDragOver={(e) => { e.preventDefault() }}
+                          onDrop={async (e) => { e.preventDefault(); addFiles(t._id, 'after', e.dataTransfer.files); await handleUpload(t._id, 'after', true) }}
+                        >
+                          + Add image
+                          <input
+                            id={`task-file-after-${t._id}`}
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => { addFiles(t._id, 'after', e.target.files); await handleUpload(t._id, 'after', true) }}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => handleUpload(t._id, 'after', true)}
+                          className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+                          disabled={!((localAfter[t._id] || []).length)}
+                        >
+                          Upload
+                        </button>
+                        {(localAfter[t._id] || []).length > 0 && (
+                          <button
+                            onClick={() => clearLocal(t._id, 'after')}
+                            className="rounded-lg border border-white/10 px-3 py-1.5 hover:bg-slate-800"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
                     {t.status !== 'in-progress' && t.status !== 'completed' && (
                       <button
@@ -943,20 +940,10 @@ export default function WorkerDashboard() {
                         className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => updateTaskStatus(t._id, 'completed')}
                         disabled={(() => {
-                          // Gate completion on after image when a related complaint is resolvable
-                          const relId = (typeof t.relatedComplaint === 'object' && t.relatedComplaint !== null)
-                            ? (t.relatedComplaint._id || '')
-                            : (t.relatedComplaint ? String(t.relatedComplaint) : '')
-                          let rel = relId ? complaints.find((c) => String(c._id) === relId) : null
-                          if (!rel) {
-                            const tt = String(t.title || '').trim().toLowerCase()
-                            if (tt) rel = complaints.find((c) => String(c.title || '').trim().toLowerCase() === tt) || null
-                          }
-                          const cid = rel?._id
-                          if (!cid) return false
-                          const hasServerAfter = (rel?.resolutionDetails?.afterImages || []).length > 0
-                          const hasLocalAfter = (localAfter[cid] || []).length > 0
-                          return !(hasServerAfter || hasLocalAfter)
+                          // Gate completion on task after image, either already on server or locally selected
+                          const hasServerAfter = (t?.resolutionDetails?.afterImages || []).length > 0
+                          const hasLocalAfterTask = (localAfter[t._id] || []).length > 0
+                          return !(hasServerAfter || hasLocalAfterTask)
                         })()}
                       >
                         Mark Completed
